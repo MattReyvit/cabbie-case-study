@@ -1,0 +1,2 @@
+# Keep the language bar focused on hand-written source; diagrams are generated artifacts.
+diagrams/*.png linguist-generated
