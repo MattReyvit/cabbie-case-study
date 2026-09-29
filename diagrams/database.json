@@ -1,0 +1,76 @@
+{
+  "title": "Cabbie - Database model (portfolio, sanitized)",
+  "tables": [
+    "auth.users",
+    "drivers",
+    "vehicles",
+    "bookings",
+    "service_ratings",
+    "pricing_rules",
+    "geocode_cache",
+    "audit_log",
+    "site_content",
+    "rate_limits"
+  ],
+  "relations": [
+    [
+      "auth.users",
+      "drivers",
+      "1:0..1",
+      "user_id"
+    ],
+    [
+      "auth.users",
+      "audit_log",
+      "1:N",
+      "performed by"
+    ],
+    [
+      "drivers",
+      "vehicles",
+      "1:N",
+      "operates"
+    ],
+    [
+      "drivers",
+      "bookings",
+      "1:N",
+      "serves"
+    ],
+    [
+      "vehicles",
+      "bookings",
+      "1:N",
+      "assigned to"
+    ],
+    [
+      "bookings",
+      "service_ratings",
+      "1:0..1",
+      "receives"
+    ],
+    [
+      "drivers",
+      "service_ratings",
+      "1:N",
+      "rated in"
+    ],
+    [
+      "pricing_rules",
+      "bookings",
+      "logical",
+      "prices by vehicle_type"
+    ],
+    [
+      "geocode_cache",
+      "bookings",
+      "logical",
+      "resolves origin and destination"
+    ]
+  ],
+  "standalone": [
+    "site_content",
+    "rate_limits"
+  ],
+  "redacted": "Personal data, plates, licences, IPs and policies are intentionally redacted."
+}
