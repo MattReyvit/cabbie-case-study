@@ -1,2 +1,4 @@
 diagrams/*.png linguist-generated
-examples/schema-excerpt.sql linguist-language=PLpgSQL linguist-detectable
+*.html linguist-generated
+examples/** linguist-documentation=false
+*.sql linguist-language=PLpgSQL linguist-detectable
