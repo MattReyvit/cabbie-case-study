@@ -1,0 +1,429 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>Cabbie — Modelo de Datos</title>
+<style>
+  *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+  :root {
+    --bg:       #0d1117;
+    --surface:  #161b22;
+    --border:   #30363d;
+    --text:     #e6edf3;
+    --text-sub: #8b949e;
+
+    --c-user:       #1d3557; --b-user:      #58a6ff;
+    --c-operador:   #1a2e1a; --b-operador:  #3fb950;
+    --c-vehiculo:   #1a2838; --b-vehiculo:  #79c0ff;
+    --c-reserva:    #2d1b2e; --b-reserva:   #d2a8ff;
+    --c-calif:      #231f18; --b-calif:     #e3b341;
+    --c-tarifa:     #3d1f1f; --b-tarifa:    #f78166;
+    --c-audit:      #1e2620; --b-audit:     #56d364;
+    --c-contenido:  #1e1e2e; --b-contenido: #8b949e;
+    --c-cache:      #1e1e2e; --b-cache:     #8b949e;
+    --c-tasa:       #1e1e2e; --b-tasa:      #8b949e;
+  }
+
+  body {
+    background: var(--bg);
+    color: var(--text);
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+    min-height: 100vh;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    padding: 32px 16px 64px;
+  }
+
+  h1 { font-size: 1.4rem; font-weight: 600; margin-bottom: 4px; letter-spacing: -0.01em; }
+  .subtitle { color: var(--text-sub); font-size: 0.85rem; margin-bottom: 32px; }
+
+  .diagram-wrap { width: 100%; max-width: 1080px; overflow-x: auto; }
+  svg.arch-diagram { display: block; width: 100%; min-width: 900px; height: auto; }
+
+  /* Nodes */
+  .node rect { stroke-width: 1.5; filter: drop-shadow(0 2px 6px rgba(0,0,0,.45)); }
+  .node-title { fill: var(--text); font-size: 12px; font-weight: 700; text-anchor: middle; dominant-baseline: central; }
+  .node-field { fill: var(--text-sub); font-size: 10px; text-anchor: start; dominant-baseline: central; }
+  .node-pk    { fill: #e3b341; font-size: 9px; text-anchor: start; font-weight: 700; }
+  .node-fk    { fill: #d2a8ff; font-size: 9px; text-anchor: start; font-weight: 700; }
+  .node-header-line { stroke: rgba(255,255,255,.08); stroke-width:1; }
+
+  /* Edges */
+  .edge { fill: none; stroke-width: 1.5; stroke-linecap: round; stroke-linejoin: round; }
+  .edge.one-many   { stroke: #58a6ff; }
+  .edge.one-one    { stroke: #3fb950; }
+  .edge.many-many  { stroke: #d2a8ff; }
+
+  .rel-label { fill: var(--text-sub); font-size: 9.5px; text-anchor: middle; }
+
+  /* Cardinality end marks */
+  .crow, .single { fill: none; stroke-width: 1.5; }
+  .crow   { stroke: #58a6ff; }
+  .single { stroke: #3fb950; }
+
+  /* Trace animation */
+  @keyframes trace-travel {
+    0%   { stroke-dashoffset: 100; opacity: 0; }
+    5%   { opacity: 1; }
+    92%  { opacity: 1; }
+    100% { stroke-dashoffset: 0;   opacity: 0; }
+  }
+  .tracer {
+    fill: none;
+    stroke-linecap: round;
+    stroke-dasharray: 16 300;
+    pointer-events: none;
+    animation: trace-travel 3s ease-in-out infinite;
+  }
+  .tracer.one-many  { stroke: #a5c8ff; stroke-width: 3; }
+  .tracer.one-one   { stroke: #7ee88f; stroke-width: 3; }
+  .tracer.many-many { stroke: #e0c0ff; stroke-width: 3; }
+
+  .t-d1  { animation-delay: 0.0s; }
+  .t-d2  { animation-delay: 0.4s; }
+  .t-d3  { animation-delay: 0.8s; }
+  .t-d4  { animation-delay: 1.2s; }
+  .t-d5  { animation-delay: 1.6s; }
+  .t-d6  { animation-delay: 2.0s; }
+  .t-d7  { animation-delay: 2.4s; }
+  .t-d8  { animation-delay: 2.8s; }
+
+  /* Legend & cards */
+  .legend {
+    display: flex; flex-wrap: wrap; gap: 12px 24px;
+    margin-top: 28px; padding: 16px 20px;
+    background: var(--surface); border: 1px solid var(--border);
+    border-radius: 10px; max-width: 1080px; width: 100%;
+  }
+  .legend-item { display: flex; align-items: center; gap: 8px; font-size: 11px; color: var(--text-sub); }
+  .legend-dot  { width: 10px; height: 10px; border-radius: 2px; flex-shrink: 0; }
+
+  .cards {
+    display: flex; flex-wrap: wrap; gap: 16px;
+    margin-top: 24px; max-width: 1080px; width: 100%;
+  }
+  .card {
+    flex: 1 1 220px;
+    background: var(--surface); border: 1px solid var(--border);
+    border-radius: 10px; padding: 16px 18px;
+  }
+  .card-header { display: flex; align-items: center; gap: 8px; margin-bottom: 10px; }
+  .card-dot { width: 8px; height: 8px; border-radius: 50%; flex-shrink: 0; }
+  .card h3 { font-size: 12px; font-weight: 600; color: var(--text); }
+  .card ul { padding-left: 14px; }
+  .card li { font-size: 11px; color: var(--text-sub); line-height: 1.7; }
+  .dot-cyan    { background: #22d3ee; }
+  .dot-emerald { background: #34d399; }
+  .dot-amber   { background: #f59e0b; }
+  .dot-violet  { background: #a78bfa; }
+</style>
+</head>
+<body>
+
+<h1>Cabbie — Modelo de Datos</h1>
+<p class="subtitle">Entidades principales y sus relaciones con trace motion</p>
+
+<div class="diagram-wrap">
+<!--
+  Layout (center-x, center-y) for each entity:
+  USUARIO       160, 120
+  OPERADOR      380, 120
+  VEHICULO      600, 120
+  RESERVA       600, 340
+  CALIFICACION  380, 340
+  CONF_TARIFA   820, 340
+  AUDIT         160, 340
+  CONTENIDO     160, 540
+  CACHE         380, 540
+  TASA          600, 540
+
+  Entity box: width=160, header=30, each row=18
+-->
+<svg class="arch-diagram" viewBox="0 0 1020 650" xmlns="http://www.w3.org/2000/svg">
+<defs>
+  <marker id="arr-blue"   viewBox="0 0 8 8" refX="7" refY="4" markerWidth="6" markerHeight="6" orient="auto-start-reverse">
+    <path d="M0,0 L8,4 L0,8 Z" fill="#58a6ff"/>
+  </marker>
+  <marker id="arr-green"  viewBox="0 0 8 8" refX="7" refY="4" markerWidth="6" markerHeight="6" orient="auto-start-reverse">
+    <path d="M0,0 L8,4 L0,8 Z" fill="#3fb950"/>
+  </marker>
+  <marker id="arr-violet" viewBox="0 0 8 8" refX="7" refY="4" markerWidth="6" markerHeight="6" orient="auto-start-reverse">
+    <path d="M0,0 L8,4 L0,8 Z" fill="#d2a8ff"/>
+  </marker>
+</defs>
+
+<!-- ═══ ENTITY NODES ═══ -->
+
+<!-- USUARIO  x=80 y=80  w=160 h=30+4*18=102 -->
+<g id="n-usuario">
+  <rect x="80" y="80" width="160" height="102" rx="8"
+        fill="var(--c-user)" stroke="var(--b-user)" stroke-width="1.5"
+        filter="drop-shadow(0 2px 6px rgba(0,0,0,.5))"/>
+  <rect x="80" y="80" width="160" height="30" rx="8" fill="rgba(88,166,255,.15)" stroke="none"/>
+  <rect x="80" y="102" width="160" height="8"  fill="rgba(88,166,255,.15)" stroke="none"/>
+  <text class="node-title" x="160" y="98">USUARIO</text>
+  <line class="node-header-line" x1="80" y1="110" x2="240" y2="110"/>
+  <text class="node-pk"    x="90" y="122">PK</text>
+  <text class="node-field" x="110" y="122">id  uuid</text>
+  <text class="node-field" x="90" y="140">rol  string</text>
+</g>
+
+<!-- OPERADOR  x=300 y=80  w=160 h=30+5*18=120 -->
+<g id="n-operador">
+  <rect x="300" y="80" width="160" height="120" rx="8"
+        fill="var(--c-operador)" stroke="var(--b-operador)" stroke-width="1.5"
+        filter="drop-shadow(0 2px 6px rgba(0,0,0,.5))"/>
+  <rect x="300" y="80" width="160" height="30" rx="8" fill="rgba(63,185,80,.15)" stroke="none"/>
+  <rect x="300" y="102" width="160" height="8"  fill="rgba(63,185,80,.15)" stroke="none"/>
+  <text class="node-title" x="380" y="98">OPERADOR</text>
+  <line class="node-header-line" x1="300" y1="110" x2="460" y2="110"/>
+  <text class="node-pk"    x="310" y="122">PK</text>
+  <text class="node-field" x="330" y="122">id  uuid</text>
+  <text class="node-fk"    x="310" y="140">FK</text>
+  <text class="node-field" x="330" y="140">usuario_id</text>
+  <text class="node-field" x="310" y="158">estado  string</text>
+</g>
+
+<!-- VEHICULO  x=520 y=80  w=160 h=30+5*18=120 -->
+<g id="n-vehiculo">
+  <rect x="520" y="80" width="160" height="120" rx="8"
+        fill="var(--c-vehiculo)" stroke="var(--b-vehiculo)" stroke-width="1.5"
+        filter="drop-shadow(0 2px 6px rgba(0,0,0,.5))"/>
+  <rect x="520" y="80" width="160" height="30" rx="8" fill="rgba(121,192,255,.15)" stroke="none"/>
+  <rect x="520" y="102" width="160" height="8"  fill="rgba(121,192,255,.15)" stroke="none"/>
+  <text class="node-title" x="600" y="98">VEHICULO</text>
+  <line class="node-header-line" x1="520" y1="110" x2="680" y2="110"/>
+  <text class="node-pk"    x="530" y="122">PK</text>
+  <text class="node-field" x="550" y="122">id  uuid</text>
+  <text class="node-fk"    x="530" y="140">FK</text>
+  <text class="node-field" x="550" y="140">operador_id</text>
+  <text class="node-field" x="530" y="158">tipo  string</text>
+  <text class="node-field" x="530" y="176">capacidad  int</text>
+</g>
+
+<!-- RESERVA  x=520 y=280  w=180 h=30+7*18=156 -->
+<g id="n-reserva">
+  <rect x="520" y="280" width="180" height="156" rx="8"
+        fill="var(--c-reserva)" stroke="var(--b-reserva)" stroke-width="1.5"
+        filter="drop-shadow(0 2px 6px rgba(0,0,0,.5))"/>
+  <rect x="520" y="280" width="180" height="30" rx="8" fill="rgba(210,168,255,.15)" stroke="none"/>
+  <rect x="520" y="302" width="180" height="8"  fill="rgba(210,168,255,.15)" stroke="none"/>
+  <text class="node-title" x="610" y="298">RESERVA</text>
+  <line class="node-header-line" x1="520" y1="310" x2="700" y2="310"/>
+  <text class="node-pk"    x="530" y="322">PK</text>
+  <text class="node-field" x="550" y="322">id  uuid</text>
+  <text class="node-fk"    x="530" y="340">FK</text>
+  <text class="node-field" x="550" y="340">operador_id</text>
+  <text class="node-fk"    x="530" y="358">FK</text>
+  <text class="node-field" x="550" y="358">vehiculo_id</text>
+  <text class="node-field" x="530" y="376">origen / servicio</text>
+  <text class="node-field" x="530" y="394">estado  string</text>
+  <text class="node-field" x="530" y="412">tarifa_total  numeric</text>
+</g>
+
+<!-- CALIFICACION  x=280 y=280  w=180 h=30+5*18=120 -->
+<g id="n-calif">
+  <rect x="280" y="280" width="180" height="120" rx="8"
+        fill="var(--c-calif)" stroke="var(--b-calif)" stroke-width="1.5"
+        filter="drop-shadow(0 2px 6px rgba(0,0,0,.5))"/>
+  <rect x="280" y="280" width="180" height="30" rx="8" fill="rgba(227,179,65,.15)" stroke="none"/>
+  <rect x="280" y="302" width="180" height="8"  fill="rgba(227,179,65,.15)" stroke="none"/>
+  <text class="node-title" x="370" y="298">CALIFICACION</text>
+  <line class="node-header-line" x1="280" y1="310" x2="460" y2="310"/>
+  <text class="node-pk"    x="290" y="322">PK</text>
+  <text class="node-field" x="310" y="322">id  uuid</text>
+  <text class="node-fk"    x="290" y="340">FK</text>
+  <text class="node-field" x="310" y="340">reserva_id</text>
+  <text class="node-fk"    x="290" y="358">FK</text>
+  <text class="node-field" x="310" y="358">operador_id</text>
+  <text class="node-field" x="290" y="376">puntaje  int</text>
+</g>
+
+<!-- CONF_TARIFA  x=740 y=280  w=180 h=30+4*18=102 -->
+<g id="n-tarifa">
+  <rect x="740" y="280" width="180" height="102" rx="8"
+        fill="var(--c-tarifa)" stroke="var(--b-tarifa)" stroke-width="1.5"
+        filter="drop-shadow(0 2px 6px rgba(0,0,0,.5))"/>
+  <rect x="740" y="280" width="180" height="30" rx="8" fill="rgba(247,129,102,.15)" stroke="none"/>
+  <rect x="740" y="302" width="180" height="8"  fill="rgba(247,129,102,.15)" stroke="none"/>
+  <text class="node-title" x="830" y="298">CONF_TARIFA</text>
+  <line class="node-header-line" x1="740" y1="310" x2="920" y2="310"/>
+  <text class="node-pk"    x="750" y="322">PK</text>
+  <text class="node-field" x="770" y="322">id  uuid</text>
+  <text class="node-field" x="750" y="340">tipo_vehiculo</text>
+  <text class="node-field" x="750" y="358">tarifa_base  numeric</text>
+</g>
+
+<!-- AUDIT  x=60 y=280  w=180 h=30+4*18=102 -->
+<g id="n-audit">
+  <rect x="60" y="280" width="180" height="102" rx="8"
+        fill="var(--c-audit)" stroke="var(--b-audit)" stroke-width="1.5"
+        filter="drop-shadow(0 2px 6px rgba(0,0,0,.5))"/>
+  <rect x="60" y="280" width="180" height="30" rx="8" fill="rgba(86,211,100,.15)" stroke="none"/>
+  <rect x="60" y="302" width="180" height="8"  fill="rgba(86,211,100,.15)" stroke="none"/>
+  <text class="node-title" x="150" y="298">REG_AUDITORIA</text>
+  <line class="node-header-line" x1="60" y1="310" x2="240" y2="310"/>
+  <text class="node-pk"    x="70" y="322">PK</text>
+  <text class="node-field" x="90" y="322">id  uuid</text>
+  <text class="node-fk"    x="70" y="340">FK</text>
+  <text class="node-field" x="90" y="340">usuario_id</text>
+  <text class="node-field" x="70" y="358">accion  string</text>
+</g>
+
+<!-- CONTENIDO  x=60 y=480  w=160 h=30+3*18=84 -->
+<g id="n-contenido">
+  <rect x="60" y="480" width="170" height="84" rx="8"
+        fill="var(--c-contenido)" stroke="var(--b-contenido)" stroke-width="1.5"
+        filter="drop-shadow(0 2px 6px rgba(0,0,0,.5))"/>
+  <text class="node-title" x="145" y="500">CONTENIDO_SITIO</text>
+  <line class="node-header-line" x1="60" y1="508" x2="230" y2="508"/>
+  <text class="node-field" x="70" y="520">seccion  string</text>
+  <text class="node-field" x="70" y="538">clave  string</text>
+  <text class="node-field" x="70" y="556">valor  json</text>
+</g>
+
+<!-- CACHE  x=260 y=480  w=170 h=30+3*18=84 -->
+<g id="n-cache">
+  <rect x="260" y="480" width="170" height="84" rx="8"
+        fill="var(--c-cache)" stroke="var(--b-cache)" stroke-width="1.5"
+        filter="drop-shadow(0 2px 6px rgba(0,0,0,.5))"/>
+  <text class="node-title" x="345" y="500">CACHE_GEO</text>
+  <line class="node-header-line" x1="260" y1="508" x2="430" y2="508"/>
+  <text class="node-field" x="270" y="520">consulta  string</text>
+  <text class="node-field" x="270" y="538">resultado  json</text>
+  <text class="node-field" x="270" y="556">usos  int</text>
+</g>
+
+<!-- TASA  x=460 y=480  w=160 h=30+2*18=66 -->
+<g id="n-tasa">
+  <rect x="460" y="480" width="160" height="66" rx="8"
+        fill="var(--c-tasa)" stroke="var(--b-tasa)" stroke-width="1.5"
+        filter="drop-shadow(0 2px 6px rgba(0,0,0,.5))"/>
+  <text class="node-title" x="540" y="500">CONTROL_TASA</text>
+  <line class="node-header-line" x1="460" y1="508" x2="620" y2="508"/>
+  <text class="node-field" x="470" y="520">origen  string</text>
+  <text class="node-field" x="470" y="538">funcion  string</text>
+</g>
+
+
+<!-- ═══ RELATIONSHIP EDGES ═══
+     Anchors (edge of box):
+       USUARIO      right=(240,131)   bottom=(160,182)
+       OPERADOR     left=(300,140)    right=(460,140) bottom=(380,200) top=(380,80)
+       VEHICULO     left=(520,140)    bottom=(600,200) top=(600,80)
+       RESERVA      left=(520,358)    top=(610,280)  right=(700,358) bottom=(610,436)
+       CALIFICACION right=(460,340)   top=(370,280)  left=(280,340)
+       CONF_TARIFA  left=(740,331)
+       AUDIT        top=(150,280)
+       (support entities have no FK relations — standalone)
+════════════════════════════════════════════ -->
+
+<!-- USUARIO ||--o{ OPERADOR  (one-to-many) -->
+<path id="e-usr-op" class="edge one-many"
+      d="M240,131 L300,131" stroke="#58a6ff" marker-end="url(#arr-blue)"/>
+<text class="rel-label" x="270" y="124">puede ser</text>
+
+<!-- USUARIO ||--o{ AUDIT -->
+<path id="e-usr-aud" class="edge one-many"
+      d="M160,182 L160,240 L150,240 L150,280" stroke="#58a6ff" marker-end="url(#arr-blue)"/>
+<text class="rel-label" x="168" y="234">genera</text>
+
+<!-- OPERADOR ||--o{ VEHICULO -->
+<path id="e-op-veh" class="edge one-many"
+      d="M460,140 L520,140" stroke="#58a6ff" marker-end="url(#arr-blue)"/>
+<text class="rel-label" x="490" y="132">opera</text>
+
+<!-- OPERADOR ||--o{ RESERVA -->
+<path id="e-op-res" class="edge one-many"
+      d="M380,200 L380,260 L570,260 L570,280" stroke="#58a6ff" marker-end="url(#arr-blue)"/>
+<text class="rel-label" x="465" y="254">atiende</text>
+
+<!-- OPERADOR ||--o{ CALIFICACION -->
+<path id="e-op-cal" class="edge one-many"
+      d="M380,200 L370,200 L370,280" stroke="#58a6ff" marker-end="url(#arr-blue)"/>
+<text class="rel-label" x="388" y="242">recibe</text>
+
+<!-- VEHICULO ||--o{ RESERVA -->
+<path id="e-veh-res" class="edge one-many"
+      d="M600,200 L600,280" stroke="#58a6ff" marker-end="url(#arr-blue)"/>
+<text class="rel-label" x="614" y="242">asignado a</text>
+
+<!-- RESERVA ||--o| CALIFICACION  (one-to-zero-or-one) -->
+<path id="e-res-cal" class="edge one-one"
+      d="M520,358 L460,340" stroke="#3fb950" marker-end="url(#arr-green)"/>
+<text class="rel-label" x="488" y="344">genera</text>
+
+<!-- CONF_TARIFA ||--o{ RESERVA -->
+<path id="e-tar-res" class="edge one-many"
+      d="M740,331 L700,358" stroke="#58a6ff" marker-end="url(#arr-blue)"/>
+<text class="rel-label" x="726" y="338">aplica a</text>
+
+
+<!-- ═══ TRACERS ═══ -->
+<path class="tracer one-many t-d1"  d="M240,131 L300,131"/>
+<path class="tracer one-many t-d2"  d="M160,182 L160,240 L150,240 L150,280"/>
+<path class="tracer one-many t-d3"  d="M460,140 L520,140"/>
+<path class="tracer one-many t-d4"  d="M380,200 L380,260 L570,260 L570,280"/>
+<path class="tracer one-many t-d5"  d="M380,200 L370,200 L370,280"/>
+<path class="tracer one-many t-d6"  d="M600,200 L600,280"/>
+<path class="tracer one-one  t-d7"  d="M520,358 L460,340"/>
+<path class="tracer one-many t-d8"  d="M740,331 L700,358"/>
+
+</svg>
+</div>
+
+<!-- Legend -->
+<div class="legend">
+  <div class="legend-item"><div class="legend-dot" style="background:#58a6ff"></div> USUARIO / núcleo de identidad</div>
+  <div class="legend-item"><div class="legend-dot" style="background:#3fb950"></div> OPERADOR</div>
+  <div class="legend-item"><div class="legend-dot" style="background:#79c0ff"></div> VEHICULO</div>
+  <div class="legend-item"><div class="legend-dot" style="background:#d2a8ff"></div> RESERVA</div>
+  <div class="legend-item"><div class="legend-dot" style="background:#e3b341"></div> CALIFICACION</div>
+  <div class="legend-item"><div class="legend-dot" style="background:#f78166"></div> CONF_TARIFA</div>
+  <div class="legend-item"><div class="legend-dot" style="background:#56d364"></div> REG_AUDITORIA</div>
+  <div class="legend-item"><div class="legend-dot" style="background:#8b949e"></div> Entidades de soporte (sin FK)</div>
+  <div class="legend-item"><div class="legend-dot" style="background:#58a6ff; border-radius:50%"></div> Relación 1-a-muchos</div>
+  <div class="legend-item"><div class="legend-dot" style="background:#3fb950; border-radius:50%"></div> Relación 1-a-1 (opcional)</div>
+</div>
+
+<!-- Cards -->
+<div class="cards">
+  <div class="card">
+    <div class="card-header">
+      <div class="card-dot dot-cyan"></div>
+      <h3>Núcleo de identidad</h3>
+    </div>
+    <ul>
+      <li>USUARIO es la raíz del modelo</li>
+      <li>Todo operador tiene un usuario_id asociado</li>
+      <li>La auditoría rastrea cada acción por usuario</li>
+    </ul>
+  </div>
+  <div class="card">
+    <div class="card-header">
+      <div class="card-dot dot-emerald"></div>
+      <h3>Flujo de reserva</h3>
+    </div>
+    <ul>
+      <li>RESERVA une operador, vehículo y tarifa</li>
+      <li>Una reserva puede generar una calificación</li>
+      <li>CONF_TARIFA se aplica dinámicamente a cada reserva</li>
+    </ul>
+  </div>
+  <div class="card">
+    <div class="card-header">
+      <div class="card-dot dot-amber"></div>
+      <h3>Entidades de soporte</h3>
+    </div>
+    <ul>
+      <li>CONTENIDO_SITIO: CMS headless sin FK directas</li>
+      <li>CACHE_GEO: optimiza consultas de geolocalización</li>
+      <li>CONTROL_TASA: rate-limiting por función/origen</li>
+    </ul>
+  </div>
+</div>
+
+</body>
+</html>
