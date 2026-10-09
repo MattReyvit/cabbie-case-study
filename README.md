@@ -4,6 +4,11 @@
 
 A ride-booking platform for a private driver service: public website, booking flow, driver management, fare rules, content management and audit trail.
 
+## Interactive diagrams
+
+- [Operational flow (animated)](https://mattreyvit.github.io/cabbie-case-study/cabbie-flujo-operativo.html)
+- [Data model (animated)](https://mattreyvit.github.io/cabbie-case-study/cabbie-modelo-datos.html)
+
 ## Problem
 Small transport operators lose bookings to slow phone/WhatsApp flows and have no structured record of trips, ratings or pricing.
 
