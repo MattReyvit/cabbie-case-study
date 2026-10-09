@@ -1,0 +1,668 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>Cabbie — Flujo Operativo</title>
+<style>
+  /* ─── Reset & base ─── */
+  *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+  :root {
+    --bg:         #0d1117;
+    --surface:    #161b22;
+    --border:     #30363d;
+    --text:       #e6edf3;
+    --text-sub:   #8b949e;
+    --accent:     #58a6ff;
+    --em:         #3fb950;
+    --sec:        #f78166;
+    --dash:       #d2a8ff;
+    --tag-bg:     #1f2937;
+    --tag-text:   #93c5fd;
+    --lane-a:     #1a2332;
+    --lane-b:     #1a2520;
+    --lane-c:     #231a2b;
+    --lane-d:     #231f18;
+    --lane-e:     #1a2332;
+
+    --node-frontend:    #1d3557;
+    --node-backend:     #1a2e1a;
+    --node-database:    #2d1b2e;
+    --node-cloud:       #1a2838;
+    --node-security:    #3d1f1f;
+    --node-messagebus:  #2d2200;
+    --node-external:    #1e1e2e;
+
+    --border-frontend:  #58a6ff;
+    --border-backend:   #3fb950;
+    --border-database:  #d2a8ff;
+    --border-cloud:     #79c0ff;
+    --border-security:  #f78166;
+    --border-messagebus:#e3b341;
+    --border-external:  #8b949e;
+  }
+
+  body {
+    background: var(--bg);
+    color: var(--text);
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+    min-height: 100vh;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    padding: 32px 16px 64px;
+  }
+
+  h1 { font-size: 1.4rem; font-weight: 600; margin-bottom: 4px; letter-spacing: -0.01em; }
+  .subtitle { color: var(--text-sub); font-size: 0.85rem; margin-bottom: 32px; }
+
+  /* ─── Diagram canvas ─── */
+  .diagram-wrap {
+    width: 100%;
+    max-width: 1100px;
+    overflow-x: auto;
+  }
+
+  svg.arch-diagram {
+    display: block;
+    width: 100%;
+    min-width: 860px;
+    height: auto;
+  }
+
+  /* ─── Lane backgrounds ─── */
+  .lane-canales  { fill: var(--lane-a); }
+  .lane-ia       { fill: var(--lane-b); }
+  .lane-captacion{ fill: var(--lane-c); }
+  .lane-operacion{ fill: var(--lane-d); }
+  .lane-gestion  { fill: var(--lane-a); }
+  .lane-notif    { fill: var(--lane-b); }
+  .lane-seguridad{ fill: var(--lane-c); }
+
+  /* ─── Lane labels ─── */
+  .lane-label { fill: var(--text-sub); font-size: 11px; font-weight: 600; text-transform: uppercase; letter-spacing: 0.06em; }
+
+  /* ─── Node styles ─── */
+  .node rect {
+    rx: 8px;
+    stroke-width: 1.5;
+    filter: drop-shadow(0 2px 6px rgba(0,0,0,.45));
+  }
+  .node.frontend rect { fill: var(--node-frontend);   stroke: var(--border-frontend); }
+  .node.backend  rect { fill: var(--node-backend);    stroke: var(--border-backend); }
+  .node.database rect { fill: var(--node-database);   stroke: var(--border-database); }
+  .node.cloud    rect { fill: var(--node-cloud);      stroke: var(--border-cloud); }
+  .node.security rect { fill: var(--node-security);   stroke: var(--border-security); }
+  .node.messagebus rect { fill: var(--node-messagebus); stroke: var(--border-messagebus); }
+  .node.external rect { fill: var(--node-external);   stroke: var(--border-external); }
+  .node.decision rect {
+    fill: var(--node-backend);
+    stroke: var(--border-backend);
+    rx: 6px;
+    stroke-dasharray: 5,3;
+  }
+
+  .node-label { fill: var(--text); font-size: 12px; font-weight: 600; text-anchor: middle; dominant-baseline: central; pointer-events: none; }
+  .node-sub   { fill: var(--text-sub); font-size: 10px; text-anchor: middle; pointer-events: none; }
+  .node-tag   { fill: var(--tag-bg); stroke: none; rx: 4; }
+  .node-tag-text { fill: var(--tag-text); font-size: 9px; font-weight: 600; text-anchor: middle; letter-spacing: 0.04em; }
+
+  /* ─── Edges ─── */
+  .edge {
+    fill: none;
+    stroke-width: 1.5;
+    stroke-linecap: round;
+    stroke-linejoin: round;
+  }
+  .edge.default   { stroke: var(--accent); }
+  .edge.emphasis  { stroke: var(--em);     stroke-width: 2; }
+  .edge.security  { stroke: var(--sec); }
+  .edge.dashed    { stroke: var(--dash);   stroke-dasharray: 6 4; }
+  .edge.observe   { stroke: var(--text-sub); stroke-dasharray: 4 4; opacity: 0.6; }
+
+  .edge-label { fill: var(--text-sub); font-size: 10px; text-anchor: middle; }
+
+  /* Arrow markers */
+  marker#arr-default   { overflow: visible; }
+  marker#arr-emphasis  { overflow: visible; }
+  marker#arr-security  { overflow: visible; }
+  marker#arr-dashed    { overflow: visible; }
+  marker#arr-observe   { overflow: visible; }
+
+  /* ─── Trace animation ─── */
+  @keyframes trace-travel {
+    0%   { stroke-dashoffset: 120; opacity: 0; }
+    5%   { opacity: 1; }
+    95%  { opacity: 1; }
+    100% { stroke-dashoffset: 0;   opacity: 0; }
+  }
+
+  .tracer {
+    fill: none;
+    stroke-linecap: round;
+    stroke-linejoin: round;
+    stroke-dasharray: 18 200;
+    pointer-events: none;
+    animation: trace-travel 2.6s ease-in-out infinite;
+  }
+  .tracer.default   { stroke: #a5c8ff; stroke-width: 3; }
+  .tracer.emphasis  { stroke: #7ee88f; stroke-width: 3.5; }
+  .tracer.security  { stroke: #ffb0a0; stroke-width: 3; }
+  .tracer.dashed    { stroke: #e0c0ff; stroke-width: 3; }
+  .tracer.observe   { stroke: #c0c0c0; stroke-width: 2; }
+
+  /* stagger delays so not all tracers fire at once */
+  .t-d1  { animation-delay:  0.0s; }
+  .t-d2  { animation-delay:  0.3s; }
+  .t-d3  { animation-delay:  0.6s; }
+  .t-d4  { animation-delay:  0.9s; }
+  .t-d5  { animation-delay:  1.2s; }
+  .t-d6  { animation-delay:  1.5s; }
+  .t-d7  { animation-delay:  1.8s; }
+  .t-d8  { animation-delay:  2.1s; }
+  .t-d9  { animation-delay:  2.4s; }
+  .t-d10 { animation-delay:  2.7s; }
+  .t-d11 { animation-delay:  3.0s; }
+  .t-d12 { animation-delay:  3.3s; }
+  .t-d13 { animation-delay:  3.6s; }
+  .t-d14 { animation-delay:  3.9s; }
+  .t-d15 { animation-delay:  0.15s; }
+  .t-d16 { animation-delay:  0.45s; }
+  .t-d17 { animation-delay:  0.75s; }
+  .t-d18 { animation-delay:  1.05s; }
+
+  /* ─── Legend ─── */
+  .legend {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 12px 24px;
+    margin-top: 28px;
+    padding: 16px 20px;
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 10px;
+    max-width: 1100px;
+    width: 100%;
+  }
+  .legend-item { display: flex; align-items: center; gap: 8px; font-size: 11px; color: var(--text-sub); }
+  .legend-dot  { width: 10px; height: 10px; border-radius: 2px; flex-shrink: 0; }
+
+  /* ─── Cards ─── */
+  .cards {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 16px;
+    margin-top: 24px;
+    max-width: 1100px;
+    width: 100%;
+  }
+  .card {
+    flex: 1 1 240px;
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 10px;
+    padding: 16px 18px;
+  }
+  .card-header { display: flex; align-items: center; gap: 8px; margin-bottom: 10px; }
+  .card-dot { width: 8px; height: 8px; border-radius: 50%; flex-shrink: 0; }
+  .card h3 { font-size: 12px; font-weight: 600; color: var(--text); }
+  .card ul { padding-left: 14px; }
+  .card li { font-size: 11px; color: var(--text-sub); line-height: 1.7; }
+  .dot-cyan    { background: #22d3ee; }
+  .dot-emerald { background: #34d399; }
+  .dot-violet  { background: #a78bfa; }
+  .dot-amber   { background: #f59e0b; }
+  .dot-rose    { background: #fb7185; }
+</style>
+</head>
+<body>
+
+<h1>Cabbie — Flujo Operativo</h1>
+<p class="subtitle">Arquitectura de canales, atención IA, captación, operación, gestión, notificaciones y seguridad</p>
+
+<div class="diagram-wrap">
+<svg class="arch-diagram" viewBox="0 0 1060 820" xmlns="http://www.w3.org/2000/svg">
+<defs>
+  <!-- Arrow markers -->
+  <marker id="arr-default"  viewBox="0 0 8 8" refX="7" refY="4" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
+    <path d="M0,0 L8,4 L0,8 Z" fill="#58a6ff"/>
+  </marker>
+  <marker id="arr-emphasis" viewBox="0 0 8 8" refX="7" refY="4" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
+    <path d="M0,0 L8,4 L0,8 Z" fill="#3fb950"/>
+  </marker>
+  <marker id="arr-security" viewBox="0 0 8 8" refX="7" refY="4" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
+    <path d="M0,0 L8,4 L0,8 Z" fill="#f78166"/>
+  </marker>
+  <marker id="arr-dashed"   viewBox="0 0 8 8" refX="7" refY="4" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
+    <path d="M0,0 L8,4 L0,8 Z" fill="#d2a8ff"/>
+  </marker>
+  <marker id="arr-observe"  viewBox="0 0 8 8" refX="7" refY="4" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
+    <path d="M0,0 L8,4 L0,8 Z" fill="#8b949e" opacity="0.7"/>
+  </marker>
+</defs>
+
+<!-- ═══════════════════════════════════════════
+     LANE BACKGROUNDS  (7 lanes, vertical swim-lanes)
+     x-layout: lanes are horizontal rows in the mermaid source,
+     so we render them as horizontal bands top→bottom.
+     Lane heights tuned to content.
+════════════════════════════════════════════ -->
+
+<!-- Canales de entrada  y=20  h=80 -->
+<rect class="lane-canales"   x="0" y="20"  width="1060" height="80"  rx="0"/>
+<!-- Capa IA              y=100 h=80 -->
+<rect class="lane-ia"        x="0" y="100" width="1060" height="80"  rx="0"/>
+<!-- Captación            y=180 h=80 -->
+<rect class="lane-captacion" x="0" y="180" width="1060" height="80"  rx="0"/>
+<!-- Motor operativo      y=260 h=160 -->
+<rect class="lane-operacion" x="0" y="260" width="1060" height="160" rx="0"/>
+<!-- Panel de gestión     y=420 h=100 -->
+<rect class="lane-gestion"   x="0" y="420" width="1060" height="100" rx="0"/>
+<!-- Notificaciones       y=520 h=80 -->
+<rect class="lane-notif"     x="0" y="520" width="1060" height="80"  rx="0"/>
+<!-- Seguridad            y=600 h=100 -->
+<rect class="lane-seguridad" x="0" y="600" width="1060" height="100" rx="0"/>
+
+<!-- Lane dividers -->
+<line x1="0" y1="20"  x2="1060" y2="20"  stroke="#30363d" stroke-width="1"/>
+<line x1="0" y1="100" x2="1060" y2="100" stroke="#30363d" stroke-width="1"/>
+<line x1="0" y1="180" x2="1060" y2="180" stroke="#30363d" stroke-width="1"/>
+<line x1="0" y1="260" x2="1060" y2="260" stroke="#30363d" stroke-width="1"/>
+<line x1="0" y1="420" x2="1060" y2="420" stroke="#30363d" stroke-width="1"/>
+<line x1="0" y1="520" x2="1060" y2="520" stroke="#30363d" stroke-width="1"/>
+<line x1="0" y1="600" x2="1060" y2="600" stroke="#30363d" stroke-width="1"/>
+<line x1="0" y1="700" x2="1060" y2="700" stroke="#30363d" stroke-width="1"/>
+
+<!-- Lane labels (left margin) -->
+<text class="lane-label" x="8" y="64" transform="rotate(-90,8,64)" text-anchor="middle">Canales</text>
+<text class="lane-label" x="8" y="144" transform="rotate(-90,8,144)" text-anchor="middle">IA</text>
+<text class="lane-label" x="8" y="224" transform="rotate(-90,8,224)" text-anchor="middle">Captación</text>
+<text class="lane-label" x="8" y="340" transform="rotate(-90,8,340)" text-anchor="middle">Operación</text>
+<text class="lane-label" x="8" y="474" transform="rotate(-90,8,474)" text-anchor="middle">Gestión</text>
+<text class="lane-label" x="8" y="564" transform="rotate(-90,8,564)" text-anchor="middle">Notif.</text>
+<text class="lane-label" x="8" y="654" transform="rotate(-90,8,654)" text-anchor="middle">Seguridad</text>
+
+
+<!-- ═══════════════════════════════════════════
+     NODES
+     Layout grid:
+       col-0=60  col-1=210  col-2=370  col-3=530  col-4=700  col-5=870
+     Node width=130, height=50 (label+sub) or 44 (tight)
+     x = colCenter - width/2
+════════════════════════════════════════════ -->
+
+<!-- ── CANALES (y=20, center=60) ── -->
+<!-- WEB -->
+<g class="node frontend" id="WEB" transform="translate(105,37)">
+  <rect width="130" height="46" rx="8"/>
+  <text class="node-label" x="65" y="20">Sitio Web</text>
+  <text class="node-sub"   x="65" y="36">canal principal</text>
+</g>
+<!-- WA -->
+<g class="node messagebus" id="WA" transform="translate(295,37)">
+  <rect width="130" height="46" rx="8"/>
+  <text class="node-label" x="65" y="20">WhatsApp</text>
+  <text class="node-sub"   x="65" y="36">canal conversacional</text>
+</g>
+
+<!-- ── IA (y=100, center=140) ── -->
+<!-- GATEWAY -->
+<g class="node backend" id="GATEWAY" transform="translate(195,115)">
+  <rect width="150" height="46" rx="8"/>
+  <text class="node-label" x="75" y="20">Gateway IA</text>
+  <text class="node-sub"   x="75" y="36">multi-modelo</text>
+</g>
+<!-- FALLBACK (decision) -->
+<g class="node decision" id="FALLBACK" transform="translate(420,115)">
+  <rect width="150" height="46" rx="8"/>
+  <text class="node-label" x="75" y="20">¿Cuota IA?</text>
+  <text class="node-sub"   x="75" y="36">decisión de ruta</text>
+</g>
+
+<!-- ── CAPTACIÓN (y=180, center=220) ── -->
+<!-- LEADS -->
+<g class="node database" id="LEADS" transform="translate(115,195)">
+  <rect width="130" height="46" rx="8"/>
+  <text class="node-label" x="65" y="20">Registro Leads</text>
+  <text class="node-sub"   x="65" y="36">captura inicial</text>
+</g>
+<!-- BOOKING -->
+<g class="node backend" id="BOOKING" transform="translate(470,195)">
+  <rect width="140" height="46" rx="8"/>
+  <text class="node-label" x="70" y="20">Motor Reservas</text>
+  <text class="node-sub"   x="70" y="36">gestión de viajes</text>
+</g>
+
+<!-- ── OPERACIÓN (y=260, center=340) ── -->
+<!-- FARE -->
+<g class="node backend" id="FARE" transform="translate(355,280)">
+  <rect width="130" height="46" rx="8"/>
+  <text class="node-label" x="65" y="20">Cálculo Tarifas</text>
+  <text class="node-sub"   x="65" y="36">precio dinámico</text>
+</g>
+<!-- ASSIGN -->
+<g class="node backend" id="ASSIGN" transform="translate(520,280)">
+  <rect width="150" height="46" rx="8"/>
+  <text class="node-label" x="75" y="20">Asignación</text>
+  <text class="node-sub"   x="75" y="36">operador / vehículo</text>
+</g>
+<!-- GEO -->
+<g class="node cloud" id="GEO" transform="translate(700,280)">
+  <rect width="130" height="46" rx="8"/>
+  <text class="node-label" x="65" y="20">Geolocalización</text>
+  <text class="node-sub"   x="65" y="36">servicio externo</text>
+</g>
+<!-- MAP -->
+<g class="node frontend" id="MAP" transform="translate(870,280)">
+  <rect width="130" height="46" rx="8"/>
+  <text class="node-label" x="65" y="20">Mapa</text>
+  <text class="node-sub"   x="65" y="36">visualización</text>
+</g>
+
+<!-- ── GESTIÓN (y=420, center=470) ── -->
+<!-- CMS -->
+<g class="node frontend" id="CMS" transform="translate(105,440)">
+  <rect width="130" height="46" rx="8"/>
+  <text class="node-label" x="65" y="20">Gestión Contenido</text>
+  <text class="node-sub"   x="65" y="36">CMS sitio</text>
+</g>
+<!-- CRM -->
+<g class="node database" id="CRM" transform="translate(295,440)">
+  <rect width="140" height="46" rx="8"/>
+  <text class="node-label" x="70" y="20">Gestión Clientes</text>
+  <text class="node-sub"   x="70" y="36">CRM / leads</text>
+</g>
+<!-- ADMIN -->
+<g class="node security" id="ADMIN" transform="translate(500,440)">
+  <rect width="130" height="46" rx="8"/>
+  <text class="node-label" x="65" y="20">Panel Admin</text>
+  <text class="node-sub"   x="65" y="36">gestión operativa</text>
+</g>
+
+<!-- ── NOTIFICACIONES (y=520, center=560) ── -->
+<!-- NOTIFQ -->
+<g class="node messagebus" id="NOTIFQ" transform="translate(470,535)">
+  <rect width="140" height="46" rx="8"/>
+  <text class="node-label" x="70" y="20">Cola Notificaciones</text>
+  <text class="node-sub"   x="70" y="36">async queue</text>
+</g>
+<!-- CHANNELS -->
+<g class="node cloud" id="CHANNELS" transform="translate(680,535)">
+  <rect width="150" height="46" rx="8"/>
+  <text class="node-label" x="75" y="20">WhatsApp / Email / SMS</text>
+  <text class="node-sub"   x="75" y="36">canales salientes</text>
+</g>
+
+<!-- ── SEGURIDAD (y=600, center=650) ── -->
+<!-- AUTH -->
+<g class="node security" id="AUTH" transform="translate(500,618)">
+  <rect width="140" height="46" rx="8"/>
+  <text class="node-label" x="70" y="20">Roles / Acceso</text>
+  <text class="node-sub"   x="70" y="36">control de permisos</text>
+</g>
+<!-- AUDIT -->
+<g class="node database" id="AUDIT" transform="translate(680,618)">
+  <rect width="130" height="46" rx="8"/>
+  <text class="node-label" x="65" y="20">Auditoría</text>
+  <text class="node-sub"   x="65" y="36">registro de cambios</text>
+</g>
+<!-- SENTRY -->
+<g class="node external" id="SENTRY" transform="translate(870,618)">
+  <rect width="130" height="46" rx="8"/>
+  <text class="node-label" x="65" y="20">Sentry</text>
+  <text class="node-sub"   x="65" y="36">monitoreo errores</text>
+</g>
+
+
+<!-- ═══════════════════════════════════════════
+     EDGES  (static strokes)
+     Format: M x1,y1  L/C ... x2,y2
+     Node anchor helpers (center-bottom = x+w/2, y+h):
+       WEB      center=(170,60)  bottom=(170,83)  top=(170,37)
+       WA       center=(360,60)  bottom=(360,83)
+       GATEWAY  center=(270,138) bottom=(270,161) top=(270,115)
+       FALLBACK center=(495,138) bottom=(495,161) top=(495,115) right=(570,138)
+       LEADS    center=(180,218) bottom=(180,241) top=(180,195) right=(245,218)
+       BOOKING  center=(540,218) bottom=(540,241) top=(540,195) left=(470,218)
+       FARE     center=(420,303) top=(420,280)  left=(355,303)
+       ASSIGN   center=(595,303) top=(595,280)  left=(520,303)
+       GEO      center=(765,303) top=(765,280)  left=(700,303)
+       MAP      center=(935,303) top=(935,280)  left=(870,303)  bottom=(935,326)
+       CMS      center=(170,463) top=(170,440)  right=(235,463)
+       CRM      center=(365,463) top=(365,440)  left=(295,463)  right=(435,463)
+       ADMIN    center=(565,463) top=(565,440)  left=(500,463)  right=(630,463)
+       NOTIFQ   center=(540,558) top=(540,535)  right=(610,558)
+       CHANNELS center=(755,558) top=(755,535)  left=(680,558)
+       AUTH     center=(570,641) top=(570,618)  right=(640,641)
+       AUDIT    center=(745,641) top=(745,618)  left=(680,641)
+       SENTRY   center=(935,641) top=(935,618)
+════════════════════════════════════════════ -->
+
+<!-- WEB → GATEWAY -->
+<path id="e-web-gw" class="edge default"
+      d="M170,83 L170,108 L270,108 L270,115"
+      marker-end="url(#arr-default)"/>
+
+<!-- WA → GATEWAY -->
+<path id="e-wa-gw" class="edge default"
+      d="M360,83 L360,108 L270,108"
+      marker-end="url(#arr-default)"/>
+
+<!-- GATEWAY → FALLBACK -->
+<path id="e-gw-fall" class="edge emphasis"
+      d="M345,138 L420,138"
+      marker-end="url(#arr-emphasis)"/>
+<text class="edge-label" x="382" y="130">verifica cuota</text>
+
+<!-- FALLBACK → LEADS (Sí) -->
+<path id="e-fall-leads" class="edge default"
+      d="M495,161 L495,175 L180,175 L180,195"
+      marker-end="url(#arr-default)"/>
+<text class="edge-label" x="338" y="172">Sí</text>
+
+<!-- FALLBACK → BOOKING (No, directo) -->
+<path id="e-fall-book" class="edge emphasis"
+      d="M495,161 L495,175 L540,175 L540,195"
+      marker-end="url(#arr-emphasis)"/>
+<text class="edge-label" x="520" y="172">No, directo</text>
+
+<!-- LEADS → CRM -->
+<path id="e-leads-crm" class="edge default"
+      d="M180,241 L180,418 L365,418 L365,440"
+      marker-end="url(#arr-default)"/>
+
+<!-- LEADS → BOOKING -->
+<path id="e-leads-book" class="edge emphasis"
+      d="M245,218 L470,218"
+      marker-end="url(#arr-emphasis)"/>
+
+<!-- BOOKING → FARE -->
+<path id="e-book-fare" class="edge default"
+      d="M540,241 L540,265 L420,265 L420,280"
+      marker-end="url(#arr-default)"/>
+
+<!-- BOOKING → ASSIGN -->
+<path id="e-book-assign" class="edge default"
+      d="M540,241 L540,280"
+      marker-end="url(#arr-default)"/>
+
+<!-- BOOKING → GEO -->
+<path id="e-book-geo" class="edge default"
+      d="M610,218 L730,218 L730,265 L765,265 L765,280"
+      marker-end="url(#arr-default)"/>
+
+<!-- GEO → MAP -->
+<path id="e-geo-map" class="edge emphasis"
+      d="M830,303 L870,303"
+      marker-end="url(#arr-emphasis)"/>
+
+<!-- MAP → WEB (return) -->
+<path id="e-map-web" class="edge dashed"
+      d="M935,326 L935,400 L90,400 L90,60 L105,60"
+      marker-end="url(#arr-dashed)"/>
+<text class="edge-label" x="510" y="395">actualiza mapa en sitio</text>
+
+<!-- CMS → WEB -->
+<path id="e-cms-web" class="edge default"
+      d="M170,440 L170,83"
+      marker-end="url(#arr-default)"/>
+
+<!-- CRM → ADMIN -->
+<path id="e-crm-admin" class="edge default"
+      d="M435,463 L500,463"
+      marker-end="url(#arr-default)"/>
+
+<!-- ADMIN → AUTH -->
+<path id="e-admin-auth" class="edge security"
+      d="M565,486 L565,510 L570,510 L570,618"
+      marker-end="url(#arr-security)"/>
+
+<!-- AUTH → AUDIT -->
+<path id="e-auth-audit" class="edge security"
+      d="M640,641 L680,641"
+      marker-end="url(#arr-security)"/>
+
+<!-- BOOKING → NOTIFQ -->
+<path id="e-book-notifq" class="edge dashed"
+      d="M540,241 L540,535"
+      marker-end="url(#arr-dashed)"/>
+
+<!-- NOTIFQ → CHANNELS -->
+<path id="e-notifq-ch" class="edge default"
+      d="M610,558 L680,558"
+      marker-end="url(#arr-default)"/>
+
+<!-- GATEWAY -.-> SENTRY -->
+<path id="e-gw-sentry" class="edge observe"
+      d="M345,138 L960,138 L960,618"
+      marker-end="url(#arr-observe)"/>
+<text class="edge-label" x="650" y="132">observado por</text>
+
+<!-- BOOKING -.-> SENTRY -->
+<path id="e-book-sentry" class="edge observe"
+      d="M610,218 L980,218 L980,618 L1000,618"
+      marker-end="url(#arr-observe)"/>
+
+<!-- GEO -.-> SENTRY -->
+<path id="e-geo-sentry" class="edge observe"
+      d="M895,303 L1000,303 L1000,618"
+      marker-end="url(#arr-observe)"/>
+
+
+<!-- ═══════════════════════════════════════════
+     TRACERS — animated dots travelling the same paths
+     Each tracer mirrors exactly one edge path.
+     Stagger by .3s increments.
+════════════════════════════════════════════ -->
+
+<!-- WEB → GATEWAY -->
+<path class="tracer default t-d1"
+      d="M170,83 L170,108 L270,108 L270,115"/>
+<!-- WA → GATEWAY -->
+<path class="tracer default t-d2"
+      d="M360,83 L360,108 L270,108"/>
+<!-- GATEWAY → FALLBACK -->
+<path class="tracer emphasis t-d3"
+      d="M345,138 L420,138"/>
+<!-- FALLBACK → LEADS -->
+<path class="tracer default t-d4"
+      d="M495,161 L495,175 L180,175 L180,195"/>
+<!-- FALLBACK → BOOKING (direct) -->
+<path class="tracer emphasis t-d5"
+      d="M495,161 L495,175 L540,175 L540,195"/>
+<!-- LEADS → BOOKING -->
+<path class="tracer emphasis t-d6"
+      d="M245,218 L470,218"/>
+<!-- BOOKING → FARE -->
+<path class="tracer default t-d7"
+      d="M540,241 L540,265 L420,265 L420,280"/>
+<!-- BOOKING → ASSIGN -->
+<path class="tracer default t-d8"
+      d="M540,241 L540,280"/>
+<!-- BOOKING → GEO -->
+<path class="tracer default t-d9"
+      d="M610,218 L730,218 L730,265 L765,265 L765,280"/>
+<!-- GEO → MAP -->
+<path class="tracer emphasis t-d10"
+      d="M830,303 L870,303"/>
+<!-- MAP → WEB return -->
+<path class="tracer dashed t-d11"
+      d="M935,326 L935,400 L90,400 L90,60 L105,60"/>
+<!-- BOOKING → NOTIFQ -->
+<path class="tracer dashed t-d12"
+      d="M540,241 L540,535"/>
+<!-- NOTIFQ → CHANNELS -->
+<path class="tracer default t-d13"
+      d="M610,558 L680,558"/>
+<!-- ADMIN → AUTH -->
+<path class="tracer security t-d14"
+      d="M565,486 L565,510 L570,510 L570,618"/>
+<!-- AUTH → AUDIT -->
+<path class="tracer security t-d15"
+      d="M640,641 L680,641"/>
+<!-- CMS → WEB -->
+<path class="tracer default t-d16"
+      d="M170,440 L170,83"/>
+<!-- LEADS → CRM -->
+<path class="tracer default t-d17"
+      d="M180,241 L180,418 L365,418 L365,440"/>
+<!-- GATEWAY -.-> SENTRY -->
+<path class="tracer observe t-d18"
+      d="M345,138 L960,138 L960,618"/>
+
+</svg>
+</div><!-- .diagram-wrap -->
+
+<!-- Legend -->
+<div class="legend">
+  <div class="legend-item"><div class="legend-dot" style="background:var(--border-frontend)"></div> Frontend / UI</div>
+  <div class="legend-item"><div class="legend-dot" style="background:var(--border-backend)"></div> Backend / Servicio</div>
+  <div class="legend-item"><div class="legend-dot" style="background:var(--border-database)"></div> Base de datos / Store</div>
+  <div class="legend-item"><div class="legend-dot" style="background:var(--border-cloud)"></div> Servicio externo / Cloud</div>
+  <div class="legend-item"><div class="legend-dot" style="background:var(--border-security)"></div> Seguridad / Control</div>
+  <div class="legend-item"><div class="legend-dot" style="background:var(--border-messagebus)"></div> Message bus / Cola</div>
+  <div class="legend-item"><div class="legend-dot" style="background:#58a6ff"></div> Flujo principal</div>
+  <div class="legend-item"><div class="legend-dot" style="background:#3fb950"></div> Flujo énfasis</div>
+  <div class="legend-item"><div class="legend-dot" style="background:#d2a8ff"></div> Flujo secundario (dashed)</div>
+  <div class="legend-item"><div class="legend-dot" style="background:#8b949e"></div> Observabilidad</div>
+</div>
+
+<!-- Cards -->
+<div class="cards">
+  <div class="card">
+    <div class="card-header">
+      <div class="card-dot dot-cyan"></div>
+      <h3>Canales de Entrada</h3>
+    </div>
+    <ul>
+      <li>Web y WhatsApp convergen en el Gateway IA</li>
+      <li>El gateway verifica cuota antes de rutar</li>
+      <li>Ruta directa a reservas si la IA no está disponible</li>
+    </ul>
+  </div>
+  <div class="card">
+    <div class="card-header">
+      <div class="card-dot dot-emerald"></div>
+      <h3>Motor Operativo</h3>
+    </div>
+    <ul>
+      <li>Las reservas disparan tarifas, asignación y geolocalización</li>
+      <li>El mapa devuelve resultado al sitio web en tiempo real</li>
+      <li>Las notificaciones salen en paralelo por cola async</li>
+    </ul>
+  </div>
+  <div class="card">
+    <div class="card-header">
+      <div class="card-dot dot-rose"></div>
+      <h3>Seguridad y Observabilidad</h3>
+    </div>
+    <ul>
+      <li>Admin → Roles → Auditoría: cadena de control estricta</li>
+      <li>Gateway, Reservas y Geo son observados por Sentry</li>
+      <li>CMS alimenta el sitio de forma independiente</li>
+    </ul>
+  </div>
+</div>
+
+</body>
+</html>
