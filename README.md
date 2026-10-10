@@ -6,8 +6,8 @@ A ride-booking platform for a private driver service: public website, booking fl
 
 ## Interactive diagrams
 
-- [Operational flow (animated)](https://mattreyvit.github.io/cabbie-case-study/cabbie-flujo-operativo.html)
-- [Data model (animated)](https://mattreyvit.github.io/cabbie-case-study/cabbie-modelo-datos.html)
+- [Operational flow (animated)](https://reyvit-cisneros.github.io/cabbie-case-study/cabbie-flujo-operativo.html)
+- [Data model (animated)](https://reyvit-cisneros.github.io/cabbie-case-study/cabbie-modelo-datos.html)
 
 ## Problem
 Small transport operators lose bookings to slow phone/WhatsApp flows and have no structured record of trips, ratings or pricing.
@@ -34,10 +34,10 @@ flowchart LR
 ## Documents
 - [ARCHITECTURE.md](ARCHITECTURE.md) — layers, data flow and security model
 - [DATABASE.md](DATABASE.md) — sanitized entity-relationship model
-- [Interactive diagram](https://mattreyvit.github.io/cabbie-case-study/database-animated.html) *(GitHub Pages)*
+- [Interactive diagram](https://reyvit-cisneros.github.io/cabbie-case-study/database-animated.html) *(GitHub Pages)*
 
 ## My role
-Product definition, UX flows, data model, security policies, SEO and delivery — using AI-assisted development with a documented method ([reyvit-framework](https://github.com/MattReyvit/reyvit-framework)).
+Product definition, UX flows, data model, security policies, SEO and delivery — using AI-assisted development with a documented method ([reyvit-framework](https://github.com/Reyvit-Cisneros/reyvit-framework)).
 
 ## Omitted for confidentiality
 Client identity, real records, access policies' literal code, API keys, internal endpoints and production URLs.
